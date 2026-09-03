@@ -1,894 +1,614 @@
-# Vision-Language-Action (VLA) Models
+# Vision-Language-Action Models for Autonomous Driving
 
-> Tóm tắt nội dung tài liệu **“From Perception to Action: The Evolution of Vision-Language-Action Models”** của **Tien-Dat Nguyen** (VAL Lab / VinSpace).
-
----
-
-## 1. Tổng quan
-
-Tài liệu trình bày quá trình phát triển từ các hệ thống AI chỉ làm **perception** (nhận thức) sang các hệ thống có khả năng **hiểu đa phương thức, suy luận và trực tiếp tạo hành động vật lý**. Trọng tâm là **Vision-Language-Action (VLA)** và hai hướng ứng dụng chính:
-
-- **Robot VLA (R-VLA)**: robot thao tác trong môi trường vật lý dựa trên hình ảnh, câu lệnh ngôn ngữ và trạng thái robot.
-- **Autonomous-Driving VLA (AD-VLA)**: xe tự hành kết hợp quan sát đa camera, trạng thái xe, lệnh điều hướng và ngữ cảnh để dự đoán quỹ đạo hoặc điều khiển xe.
-
-Thông điệp xuyên suốt của tài liệu là sự chuyển dịch từ pipeline robot truyền thống gồm nhiều module độc lập sang một policy đa phương thức có thể ánh xạ trực tiếp từ **quan sát + ngôn ngữ + trạng thái** sang **hành động**.
+> **Personal overview / study notes** về cách Vision-Language-Action (VLA) được nghiên cứu và ứng dụng trong autonomous driving.  
+> Phần đầu tiên của tài liệu thiết lập nền tảng về **các mức độ tự động hóa lái xe theo SAE J3016** trước khi đi vào VLA.
 
 ---
 
-## 2. Từ hệ thống modular truyền thống đến VLA
+# 1. Levels of Driving Automation
 
-### 2.1. Pipeline robot truyền thống
+## 1.1. Vì sao cần phân biệt các mức độ tự lái?
 
-Một pipeline robotics truyền thống thường có chuỗi xử lý:
+Cụm từ **“self-driving car”**, **“autonomous vehicle”** hay **“xe tự lái”** thường được sử dụng khá rộng trong truyền thông. Tuy nhiên, trong nghiên cứu và công nghiệp, mức độ tự động hóa thường được mô tả theo chuẩn **SAE J3016 – Taxonomy and Definitions for Terms Related to Driving Automation Systems for On-Road Motor Vehicles**.[^sae-j3016]
+
+SAE chia driving automation thành **6 mức, từ Level 0 đến Level 5**:
 
 ```text
-Video Camera / Sensors
-        ↓
-    Perception
-        ↓
- State Estimation
-        ↓
-Task & Motion Planning
-        ↓
-      Control
-        ↓
-       Robot
+Level 0 ── Level 1 ── Level 2 ── Level 3 ── Level 4 ── Level 5
+   │          │          │          │          │          │
+   └──────── Driver Support ────────┘          │          │
+                         └──── Automated Driving ──────────┘
 ```
 
-Cách thiết kế này chia hệ thống thành các thành phần chuyên biệt. Mỗi module xử lý một nhiệm vụ riêng, sau đó truyền kết quả cho module tiếp theo.
+Theo biểu đồ chính thức của SAE, **Levels 0–2** thuộc nhóm mà con người vẫn là người lái và phải giám sát hệ thống; **Levels 3–5** là các mức mà Automated Driving System (ADS) thực hiện toàn bộ **Dynamic Driving Task (DDT)** khi tính năng tự động hóa được kích hoạt.[^sae-chart]
 
-### 2.2. Khó khăn của modular pipeline
-
-Tài liệu minh họa autonomous driving như một trường hợp mà pipeline modular trở nên khó quản lý. Trong môi trường thực tế, perception, hiểu ngữ cảnh, ra quyết định, planning và control phụ thuộc mạnh vào nhau; lỗi ở một module có thể lan truyền sang toàn bộ pipeline.
-
-Điều này tạo động lực cho các mô hình end-to-end và các mô hình đa phương thức tích hợp perception, reasoning và action trong cùng một kiến trúc.
+> **Điểm chuyển quan trọng nhất không phải Level 4 → Level 5, mà là Level 2 → Level 3.**  
+> Ở Level 2, người lái vẫn chịu trách nhiệm giám sát môi trường. Ở Level 3, hệ thống tự động thực hiện toàn bộ DDT trong phạm vi hoạt động được thiết kế, nhưng người lái phải sẵn sàng tiếp quản khi hệ thống yêu cầu.[^sae-summary][^nhtsa-levels]
 
 ---
 
-## 3. Sự tiến hóa của Machine Intelligence
+## 1.2. Ba khái niệm cần biết trước
 
-Tài liệu mô tả một tiến trình phát triển tổng quát:
+### Dynamic Driving Task — DDT
+
+**Dynamic Driving Task (DDT)** là các nhiệm vụ vận hành và chiến thuật cần thực hiện theo thời gian thực để điều khiển xe trên đường. Theo SAE, nó bao gồm các chức năng như:
+
+- điều khiển chuyển động ngang — **lateral control / steering**;
+- điều khiển chuyển động dọc — **acceleration và deceleration**;
+- quan sát môi trường;
+- phát hiện và phản ứng với object/event;
+- lập kế hoạch maneuver;
+- signaling và các hành vi vận hành liên quan.
+
+DDT **không bao gồm** các nhiệm vụ chiến lược cấp cao như lựa chọn điểm đến hoặc lập lịch chuyến đi.[^sae-summary]
+
+Có thể hình dung:
 
 ```text
-Traditional ML
+Dynamic Driving Task
+│
+├── Lateral control
+│      └── Steering
+│
+├── Longitudinal control
+│      ├── Acceleration
+│      └── Braking
+│
+├── Environment monitoring
+│      └── Object & Event Detection and Response
+│
+└── Tactical maneuvering
+       ├── Lane change
+       ├── Yield
+       ├── Overtake
+       └── Turn
+```
+
+---
+
+### Object and Event Detection and Response — OEDR
+
+**OEDR** là phần của DDT chịu trách nhiệm:
+
+```text
+Detect
    ↓
-Deep Learning
+Recognize / Classify
    ↓
-Generative AI
+Understand the situation
    ↓
-AI Agents
+Prepare a response
    ↓
-Agentic AI / Embodied Intelligence
+Execute an appropriate response
 ```
-
-Điểm thay đổi quan trọng là AI chuyển từ:
-
-- nhận biết / phân loại,
-- sang sinh nội dung,
-- sang hiểu ngữ cảnh đa phương thức,
-- rồi cuối cùng có khả năng **lập kế hoạch và hành động trong thế giới thực**.
-
----
-
-## 4. Vision-Language Model (VLM)
-
-### 4.1. Ý tưởng
-
-VLM kết hợp hai nguồn thông tin chính:
-
-- **Vision**: ảnh hoặc video.
-- **Language**: câu hỏi, mô tả hoặc instruction.
-
-Mục tiêu là tạo biểu diễn chung giữa hình ảnh và ngôn ngữ để mô hình có thể mô tả ảnh, trả lời câu hỏi về ảnh hoặc thực hiện reasoning đa phương thức.
-
-### 4.2. Cách xử lý đa phương thức
-
-Sơ đồ trong tài liệu minh họa việc:
-
-- encode ảnh bằng image encoder,
-- encode text/token bằng language encoder hoặc word embedding,
-- đưa các token vision và language vào một bộ xử lý chung,
-- học alignment giữa hai modality thông qua các nhiệm vụ như contrastive matching hoặc masked prediction.
-
-VLM là nền tảng quan trọng để tiến tới VLA vì nó cung cấp khả năng **nhìn + hiểu ngôn ngữ** trước khi thêm khả năng sinh **action**.
-
----
-
-## 5. Vision-Language-Action là gì?
-
-### 5.1. Định nghĩa
-
-Một VLA model ánh xạ:
-
-- quan sát thị giác,
-- instruction bằng ngôn ngữ,
-- trạng thái của hệ thống,
-
-thành một hành động vật lý.
-
-Công thức trong tài liệu:
-
-```text
-a_t = π_θ(o_t, ℓ, s_t)
-```
-
-Trong đó:
-
-- `o_t`: visual observation tại thời điểm `t`.
-- `ℓ`: language instruction.
-- `s_t`: system state.
-- `π_θ`: VLA policy có tham số `θ`.
-- `a_t`: physical action được sinh ra.
-
-### 5.2. Ví dụ
-
-#### Robot manipulation
-
-```text
-Observation:
-- A red cup is on the table
-
-Instruction:
-- "Pick up the red cup"
-
-State:
-- Arm position
-- Gripper state
-
-Action:
-- Move the arm
-- Close the gripper
-```
-
-#### Autonomous driving
-
-```text
-Observation:
-- A pedestrian is crossing the road
-
-Instruction:
-- "Follow the planned route"
-
-State:
-- Vehicle speed
-- Vehicle position
-
-Action:
-- Slow down
-- Stop
-```
-
-VLA vì vậy có thể xem là bước mở rộng từ VLM:
-
-```text
-VLM: Vision + Language → Understanding / Text
-VLA: Vision + Language + State → Physical Action
-```
-
----
-
-## 6. Bên trong một VLA Model
-
-Tài liệu sử dụng **Qwen-VLA / QwenVL-based architecture** để minh họa pipeline tổng quát.
-
-Các thành phần chính gồm:
-
-1. **Visual observations**
-   - một ảnh,
-   - hoặc chuỗi frame/video.
-
-2. **Task instruction**
-   - ví dụ: `"Pick up the red cup"`.
-
-3. **Embodiment-aware prompt / system state**
-   - thông tin về robot,
-   - trạng thái embodiment,
-   - proprioception,
-   - các biến điều khiển liên quan.
-
-4. **Vision-Language backbone**
-   - biểu diễn các modality thành token,
-   - trộn các vision token, text token và proprioceptive/system token trong một chuỗi multimodal interleaved.
-
-5. **Action Expert / Action Head**
-   - chuyển hidden representation của VLM thành action representation.
-
-6. **Action generation**
-   - tạo action liên tục hoặc action trajectory/chunk.
-
----
-
-## 7. Bên trong QwenVL Decoder
-
-Sơ đồ trong tài liệu cho thấy quy trình xử lý nhiều loại input trong cùng một token stream:
-
-```text
-Visual frames/images ─┐
-Task instruction ─────┼─→ Interleaved multimodal token sequence
-Robot/system state ───┘
-                            ↓
-                       QwenVL Decoder
-                            ↓
-                   Multimodal hidden states
-                            ↓
-                  Action / output modules
-```
-
-Ý tưởng chính là tất cả modality được đưa về một biểu diễn thống nhất để transformer decoder có thể học quan hệ giữa quan sát, instruction và trạng thái embodiment.
-
----
-
-## 8. Format dữ liệu cho VLA
-
-Một sample VLA điển hình có ba nhóm thông tin:
-
-### 8.1. Visual observation
-
-- image hoặc video frame,
-- có thể gồm nhiều camera hoặc nhiều thời điểm.
-
-### 8.2. Task instruction
 
 Ví dụ:
 
 ```text
-"Pick up the red cup"
+Camera detects a pedestrian
+          ↓
+Pedestrian is approaching a crosswalk
+          ↓
+Possible crossing event
+          ↓
+Vehicle prepares to yield
+          ↓
+Decelerate / stop
 ```
 
-Instruction được tokenize thành text tokens.
+Khái niệm này đặc biệt quan trọng với VLA vì nhiều VLA driving models đang cố gắng kết hợp:
 
-### 8.3. Embodiment-aware / system prompt
+```text
+Perception → Reasoning → Planning → Action
+```
 
-Có thể chứa:
-
-- robot state,
-- end-effector pose,
-- joint information,
-- gripper state,
-- embodiment description,
-- proprioceptive data.
-
-Ba nguồn dữ liệu được convert về token rồi ghép thành một **interleaved multimodal input sequence** cho model.
+trong một mô hình đa phương thức thống nhất.
 
 ---
 
-## 9. Đánh giá VLA
+### Operational Design Domain — ODD
 
-Tài liệu chia evaluation thành bốn nhóm chính.
+**Operational Design Domain (ODD)** mô tả **những điều kiện mà một hệ thống driving automation được thiết kế để hoạt động**. Các giới hạn có thể liên quan tới:
 
-| Nhóm đánh giá | Metric thường gặp | Ý nghĩa |
-|---|---|---|
-| Task completion | Success Rate (SR) | Robot/xe có hoàn thành task hay không |
-| Generalization | OOD Success Rate | Có làm được khi đổi object, background, vị trí hoặc instruction hay không |
-| Long-horizon behavior | Avg. sequence length, multi-step success | Có thực hiện liên tục nhiều sub-task hay không |
-| Safety / efficiency | Collision rate, route completion, comfort, latency | Đặc biệt quan trọng với autonomous driving |
+- khu vực địa lý;
+- loại đường;
+- tốc độ;
+- thời gian trong ngày;
+- thời tiết;
+- điều kiện ánh sáng;
+- tình trạng giao thông;
+- đặc điểm cơ sở hạ tầng.[^odd]
 
-Điểm đáng chú ý là VLA không chỉ được đánh giá bằng accuracy như các model perception mà phải đánh giá **khả năng hoàn thành nhiệm vụ thực tế**.
+Ví dụ một hệ thống có thể có ODD:
+
+```text
+Highway only
++ daytime
++ clear weather
++ mapped roads
++ speed ≤ 100 km/h
+```
+
+Một robotaxi khác có thể có:
+
+```text
+Geofenced urban area
++ selected streets
++ speed ≤ 50 km/h
++ no severe weather
+```
+
+**Level 4 vẫn có thể bị giới hạn bởi ODD.**  
+**Level 5** được định nghĩa là full driving automation có thể thực hiện nhiệm vụ lái trong mọi điều kiện đường và môi trường mà một người lái có thể xử lý; vì vậy Level 5 không còn bị giới hạn bởi một ODD cụ thể theo cách Level 3/4 thường bị giới hạn.[^nhtsa-levels][^odd]
 
 ---
 
-# Part I - Robot VLA (R-VLA)
+# 2. SAE Levels 0–5
 
-## 10. R-VLA trong thực tế
+## Level 0 — No Driving Automation
 
-Các ví dụ demo trong tài liệu cho thấy cùng một model có thể thành công hoặc thất bại tùy task.
+Ở **Level 0**, con người thực hiện toàn bộ nhiệm vụ lái xe.
 
-Một số failure mode được minh họa:
+Hệ thống có thể cung cấp:
 
-- mất cân bằng khi thực hiện động tác,
-- vô tình đá vào hộp,
-- dừng quá muộn,
-- thực hiện đúng một số task nhưng thất bại ở task khác.
+- cảnh báo;
+- hỗ trợ trong thời gian ngắn;
+- emergency intervention.
 
-Điều này nhấn mạnh rằng VLA vẫn phải đối mặt với vấn đề robustness, control precision và long-horizon execution.
+Ví dụ mà NHTSA dùng để giải thích Level 0 gồm:
+
+- Forward Collision Warning;
+- Lane Departure Warning;
+- Automatic Emergency Braking.[^nhtsa-levels]
+
+```text
+Human
+ ├── Steering
+ ├── Acceleration
+ ├── Braking
+ └── Environment monitoring
+
+Vehicle
+ └── Warning / momentary assistance
+```
+
+### Lưu ý
+
+Trong SAE J3016, các hệ thống active safety chỉ can thiệp **tạm thời**, chẳng hạn Automatic Emergency Braking, không được xem là driving automation theo nghĩa thực hiện DDT một cách **sustained**.[^sae-j3016]
 
 ---
 
-## 11. Từ task đến chuyển động robot
+## Level 1 — Driver Assistance
 
-Ví dụ instruction:
-
-```text
-"Put the apple into the bowl."
-```
-
-Một task có thể được chia thành chuỗi hành động:
+Ở **Level 1**, hệ thống có thể hỗ trợ liên tục:
 
 ```text
-1. Reach
-2. Align
-3. Grasp
-4. Lift
-5. Move
-6. Place
-7. Release
+Steering
+   OR
+Acceleration / Braking
 ```
 
-### 11.1. Action space của robot
+nhưng **không đồng thời đảm nhiệm cả hai** như một Level 2 feature.[^sae-chart]
 
-Tài liệu trình bày ba cách điều khiển phổ biến.
+Ví dụ:
 
-#### A. End-effector control
-
-Điều khiển trực tiếp pose của end-effector, ví dụ:
+- Adaptive Cruise Control;
+- Lane Centering / Lane Keeping assistance.
 
 ```text
-Δx, Δy, Δz,
-Δroll, Δpitch, Δyaw,
-gripper
+                 Human driver
+              monitors environment
+                      │
+          ┌───────────┴───────────┐
+          ↓                       ↓
+       Steering              Accel/Brake
+          │                       │
+        Human                  System
+
+              OR vice versa
 ```
 
-#### B. Joint control
-
-Dự đoán hoặc điều khiển trực tiếp các joint command:
-
-```text
-q = [q1, q2, ..., qn]
-```
-
-#### C. Mobile manipulation
-
-Kết hợp:
-
-- arm action,
-- gripper,
-- base velocity.
+Người lái vẫn chịu trách nhiệm cho nhiệm vụ lái và phải liên tục giám sát hệ thống.[^nhtsa-levels]
 
 ---
 
-## 12. Thu thập dữ liệu Robot VLA
+## Level 2 — Partial Driving Automation
 
-Tài liệu nêu bốn phương pháp chính.
-
-### 12.1. Teleoperation
+Ở **Level 2**, hệ thống có thể thực hiện **đồng thời**:
 
 ```text
-Human → controller → robot
+Steering
+   +
+Acceleration / Braking
 ```
 
-Ví dụ thiết bị:
-
-- VR controller,
-- joystick,
-- leader arm.
-
-Ưu điểm: người điều khiển trực tiếp robot và tạo demonstration có chất lượng.
-
-### 12.2. Kinesthetic Teaching
-
-Người trực tiếp cầm hoặc dẫn robot thực hiện động tác.
-
-Đặc điểm:
-
-- trực quan,
-- robot ghi lại trajectory,
-- phù hợp với các task manipulation.
-
-### 12.3. Autonomous Rollouts
-
-Policy hiện tại tự chạy và hệ thống ghi trajectory.
-
-Sau đó có thể:
-
-- lọc trajectory,
-- relabel,
-- sử dụng lại làm training data.
-
-### 12.4. Simulation
-
-Dùng simulator để tạo demonstration tổng hợp.
-
-Ưu điểm:
-
-- dữ liệu quy mô lớn,
-- an toàn,
-- chi phí thấp,
-- dễ tạo nhiều kịch bản.
-
-Pipeline dữ liệu tổng quát:
+Ví dụ điển hình là sự kết hợp:
 
 ```text
-Human / Simulator
-      ↓
-Observation + State + Action
-      ↓
-Robot Demonstration Dataset
+Lane Centering
+      +
+Adaptive Cruise Control
 ```
 
----
+Tuy nhiên:
 
-## 13. Dataset tiêu biểu cho Robot VLA
+> **Level 2 không có nghĩa là xe có thể tự lái mà không cần người giám sát.**
 
-Tài liệu đề cập ba dataset lớn:
+Người lái vẫn phải:
 
-- **Open X-Embodiment**
-- **DROID**
-- **Bridge Data**
-
-Open X-Embodiment được minh họa như một tập hợp dữ liệu lớn từ nhiều embodiment, nhiều task và nhiều dataset robot khác nhau, giúp huấn luyện model có khả năng transfer giữa các robot/platform khác nhau.
-
----
-
-## 14. Tiến hóa của Robot VLA Models
-
-Timeline trong tài liệu:
-
-### 2022 - RT-1
-
-- large-scale robot policy,
-- bước đầu đưa transformer-scale model vào robot manipulation.
-
-### 2023 - RT-2
-
-- kết hợp **VLM knowledge + robot actions**,
-- tận dụng knowledge từ vision-language model để cải thiện robot reasoning và generalization.
-
-### 2024 - OpenVLA
-
-- open-source VLA,
-- giúp cộng đồng tiếp cận mô hình robot VLA dễ dàng hơn.
-
-### 2024 - π0
-
-- tập trung vào **continuous action generation**.
-
-### 2025 - π0.5
-
-- mạnh hơn về generalization và data training.
-
-### 2025 - GR00T N1 / Gemini Robotics
-
-- hướng tới foundation model cho robot ở quy mô lớn,
-- tích hợp reasoning và action cho embodied intelligence.
-
-### 2026 - Qwen-VLA
-
-- sử dụng multimodal backbone kết hợp **flow-based action expert**.
-
-Timeline này cho thấy R-VLA phát triển từ action-token policy sang các mô hình foundation lớn và action generator liên tục.
-
----
-
-## 15. Cách R-VLA biểu diễn Action
-
-Tài liệu tổng hợp bốn hướng chính.
-
-### 15.1. Action Tokens
+- quan sát đường;
+- giám sát hệ thống;
+- phát hiện tình huống nguy hiểm;
+- sẵn sàng steering/braking khi cần.[^nhtsa-sgo]
 
 ```text
-Continuous Action
-      ↓
-Discretization
-      ↓
-<Action_127>, <Action_...>
-```
+              Level 2
 
-Action liên tục được lượng tử hóa thành token để language model có thể sinh action giống như sinh text token.
+Camera / Radar / Sensors
+          ↓
+    Driver-assistance
+          ↓
+ ┌────────┴─────────┐
+ ↓                  ↓
+Steering        Accel/Brake
+ │                  │
+ └──────────┬───────┘
+            ↓
+         Vehicle
 
-**Ví dụ:** RT-2, OpenVLA.
+BUT
 
-Ưu điểm:
-
-- tích hợp dễ với autoregressive LLM/VLM.
-
-Hạn chế:
-
-- discretization làm mất độ mịn của continuous control.
-
-### 15.2. Direct Regression
-
-```text
-Features
-   ↓
-MLP Head
-   ↓
-[x, y, z, ...]
-```
-
-Model dự đoán trực tiếp action liên tục.
-
-Ưu điểm:
-
-- đơn giản,
-- trực tiếp.
-
-Hạn chế:
-
-- khó mô hình hóa phân phối action đa mode.
-
-### 15.3. Diffusion Policy
-
-```text
-Noise
-  ↓
-Denoising
-  ↓
-Action Chunk
-```
-
-Model sinh action trajectory bằng quá trình diffusion/denoising.
-
-Ưu điểm:
-
-- mô hình hóa được multimodal trajectories,
-- tạo action mượt.
-
-### 15.4. Flow Matching
-
-```text
-Noisy Action
+Human driver
      ↓
-Learned Flow
+continuously monitors environment
      ↓
-Action Chunk
+remains responsible
 ```
 
-Ưu điểm được nêu trong tài liệu:
-
-- continuous action generation,
-- efficient trajectory modeling.
-
-Các ví dụ được minh họa gồm π-family và Qwen-VLA-style action expert.
+NHTSA phân biệt rõ **Level 2 ADAS** với **ADS Levels 3–5**: Level 2 chỉ cung cấp partial driving automation cho một người lái đang chú ý, trong khi ADS hướng tới thực hiện toàn bộ DDT trong phạm vi hoạt động của hệ thống.[^nhtsa-sgo]
 
 ---
 
-# Part II - Autonomous Driving VLA (AD-VLA)
+# 3. The Critical Transition: Level 2 → Level 3
 
-## 16. AD-VLA ở mức tổng quan
+Đây là ranh giới quan trọng nhất để hiểu autonomous driving.
 
-AD-VLA mở rộng mô hình vision-language-action sang bài toán xe tự hành.
+```text
+LEVEL 2                             LEVEL 3
+────────                            ────────
 
-Thay vì chỉ phát hiện lane, vehicle hoặc pedestrian rồi đưa cho planner riêng, Driving VLA có thể tiếp nhận nhiều nguồn input và trực tiếp sinh trajectory/action.
+System controls                     System performs
+steering + speed                    complete DDT
+       │                                  │
+       ▼                                  ▼
+Human monitors                       ADS monitors
+environment                          environment
 
-Các slide demo cho thấy model sử dụng nhiều camera xung quanh xe và dự đoán trajectory/decision như:
+Human is driving                    System is driving
+```
 
-- turn right,
-- keep forward.
+SAE nhấn mạnh rằng khác biệt cốt lõi giữa Level 2 và Level 3 là **ai thực hiện toàn bộ Dynamic Driving Task**.[^sae-summary]
 
 ---
 
-## 17. AD-VLA quan sát gì và dự đoán gì?
+## Level 3 — Conditional Driving Automation
 
-### 17.1. Input
+Ở **Level 3**, khi ADS hoạt động trong ODD của nó:
 
-#### A. Multi-camera images / video
-
-Ví dụ:
-
-- front,
-- left,
-- right,
-- rear.
-
-#### B. Ego vehicle state
-
-Có thể gồm:
-
-- speed,
-- pose `(x, y, z, roll, pitch, yaw)`,
-- heading.
-
-#### C. Previous trajectory
-
-Quỹ đạo trước đó của xe.
-
-#### D. Route / navigation command
-
-Ví dụ:
+- hệ thống thực hiện toàn bộ DDT;
+- hệ thống giám sát môi trường;
+- con người không cần liên tục thực hiện DDT;
+- **nhưng phải sẵn sàng tiếp quản khi hệ thống yêu cầu**.[^nhtsa-levels]
 
 ```text
-"Turn right at the next intersection"
-```
+Normal operation
 
-#### E. Optional LiDAR / map information
-
-Có thể bổ sung:
-
-- LiDAR point cloud,
-- HD map / lane information.
-
-### 17.2. Bên trong Driving VLA
-
-Model thực hiện đồng thời hoặc liên kết ba khả năng:
-
-```text
+Sensors
+   ↓
+   ADS
+   ↓
 Perception
-Reasoning
+   ↓
 Planning
-```
-
-### 17.3. Output
-
-Hai nhóm output chính:
-
-1. **Future trajectory / waypoints**
-2. **Low-level control**
-   - steering,
-   - acceleration,
-   - brake.
-
----
-
-## 18. Thu thập dữ liệu cho AD-VLA
-
-Tài liệu chia thành bốn nguồn chính.
-
-### 18.1. Real Driving Logs
-
-Thu thập từ xe thật:
-
-- camera,
-- LiDAR / radar,
-- ego state,
-- human/autonomous driving trajectory.
-
-### 18.2. Human Driving
-
-Sử dụng:
-
-- expert trajectories,
-- driver decisions.
-
-Đây là dạng driving demonstration tương tự imitation learning.
-
-### 18.3. Language Annotation
-
-Bổ sung annotation dạng ngôn ngữ như:
-
-- scene description,
-- driving reasoning,
-- navigation instruction.
-
-Ví dụ:
-
-```text
-"Heavy cross traffic from the left"
-"Slow down and yield to pedestrians"
-"Turn right onto Oak St."
-```
-
-Language annotation là thành phần quan trọng giúp xe không chỉ bắt chước trajectory mà còn học được mô tả và reasoning về tình huống giao thông.
-
-### 18.4. Simulation
-
-Simulator được dùng để tạo:
-
-- rare scenarios,
-- safety-critical cases,
-- tình huống khó thu thập ngoài đời thật.
-
----
-
-## 19. Dataset cho AD-VLA
-
-Slide dataset nhấn mạnh ba đặc điểm quan trọng của dữ liệu Driving VLA hiện đại:
-
-### 19.1. Long-tail driving scenarios
-
-Dataset cần chứa nhiều tình huống hiếm hoặc khó như:
-
-- traffic control / signage anomaly,
-- work zone / roadwork,
-- vulnerable road users,
-- animals on road,
-- emergency vehicles,
-- stationary vehicle obstruction.
-
-### 19.2. Comprehensive reasoning annotations
-
-Không chỉ có trajectory mà còn có annotation reasoning, ví dụ:
-
-- spatial reasoning,
-- 2D/3D object understanding,
-- map/topology understanding,
-- causal driving reasoning,
-- counterfactual reasoning.
-
-### 19.3. Large-scale data
-
-Tài liệu minh họa rằng quy mô dữ liệu lớn và reasoning annotation đầy đủ có thể cải thiện cả:
-
-- reasoning score,
-- planning score.
-
----
-
-## 20. Tiến hóa của AD-VLA Models
-
-Timeline trong tài liệu:
-
-### 2023-2024 - DriveLM
-
-- bridge toward Driving VLA,
-- structured perception-prediction-planning reasoning.
-
-### 2024 - EMMA
-
-- multimodal reasoning,
-- kết hợp camera + navigation + ego state để sinh planner trajectory.
-
-### 2025 - SimLingo
-
-- closed-loop language-action alignment,
-- liên kết driving + VLM understanding + aligned actions.
-
-### 2025 - OpenDriveVLA
-
-- end-to-end trajectory generation,
-- 2D/3D perception + ego state + driver command → trajectory.
-
-### 2025 - AutoVLA
-
-- unified reasoning + action tokens,
-- trajectory tokenization kết hợp RL fine-tuning.
-
-### 2025-2026 - Alpamayo-R1
-
-- reasoning-oriented planning,
-- trajectory planning cho các tình huống driving phức tạp.
-
-Nhìn tổng thể, AD-VLA tiến hóa theo hướng:
-
-```text
-Reasoning & Understanding
-        ↓
-Closed-loop Alignment
-        ↓
-Action & Trajectory Generation
-        ↓
-End-to-End Driving VLA
-```
-
----
-
-## 21. Cách AD-VLA biểu diễn Action
-
-Tài liệu nêu hai hướng chính.
-
-### 21.1. Direct Control
-
-```text
-Features
    ↓
-Control Head
+Control
    ↓
-Steering / Throttle / Brake
+Vehicle
+
+
+If ADS reaches its limit:
+
+ADS
+ ↓
+Request to intervene
+ ↓
+Human driver
+ ↓
+Take over
 ```
 
-Đây là low-level control trực tiếp.
+Do đó Level 3 tạo ra một vấn đề nghiên cứu đặc biệt quan trọng:
 
-**Ưu điểm:**
-
-- direct,
-- simple.
-
-**Hạn chế:**
-
-- khó verify,
-- khó constrain,
-- tính interpretability thấp hơn trajectory-level planning.
-
-### 21.2. Waypoint / Trajectory Prediction
-
-```text
-Multimodal Features
-        ↓
-Trajectory Decoder
-        ↓
-Future Waypoints / Trajectory
-```
-
-Ví dụ output:
-
-```text
-(x1, y1)
-(x2, y2)
-...
-(xn, yn)
-```
-
-**Ưu điểm:**
-
-- dễ diễn giải,
-- dễ kết hợp với controller,
-- thuận lợi hơn cho việc kiểm tra và áp constraint.
-
-Theo slide, đây là cách biểu diễn phổ biến hơn trong Driving VLA.
+> **Takeover / handover:** người lái có thể phản ứng đủ nhanh và chính xác khi hệ thống yêu cầu tiếp quản hay không?
 
 ---
 
-# 22. So sánh Robot VLA và Autonomous-Driving VLA
+## Level 4 — High Driving Automation
 
-| Thành phần | Robot VLA | Autonomous-Driving VLA |
-|---|---|---|
-| Vision input | RGB/video robot camera | Multi-camera, đôi khi LiDAR/map |
-| Language | Manipulation instruction | Navigation + reasoning instruction |
-| State | Joint, end-effector, gripper | Speed, pose, heading, previous trajectory |
-| Action | End-effector / joint / gripper / base | Steering-throttle-brake hoặc trajectory |
-| Data source | Teleoperation, kinesthetic teaching, rollout, simulation | Driving logs, human driving, language annotation, simulation |
-| Common output | Action token / continuous action chunk | Waypoint / trajectory / control command |
-| Evaluation | Task success, OOD generalization, long-horizon | Route completion, collision, comfort, latency, planning quality |
+Ở **Level 4**, hệ thống có thể thực hiện toàn bộ DDT **và không phụ thuộc vào người lái để xử lý fallback** trong ODD mà nó hỗ trợ.[^sae-chart]
 
----
+Người ngồi trong xe có thể chỉ là passenger.
 
-# 23. Các ý chính cần nhớ
+Tuy nhiên Level 4 **không có nghĩa là xe chạy được ở mọi nơi**.
 
-1. **VLA là bước phát triển tiếp theo của VLM.** VLM hiểu vision + language; VLA thêm khả năng biến hiểu biết đó thành hành động vật lý.
-
-2. **VLA không chỉ nhận ảnh và text.** State/embodiment information rất quan trọng vì cùng một instruction nhưng robot/vehicle ở trạng thái khác nhau phải tạo action khác nhau.
-
-3. **Dữ liệu là thành phần cốt lõi.** Robot VLA dựa nhiều vào demonstration; Driving VLA cần real-world logs, expert driving, language annotation và simulation.
-
-4. **Action representation là quyết định kiến trúc quan trọng.** Robot VLA có thể dùng action token, direct regression, diffusion hoặc flow matching; Driving VLA thường dùng direct control hoặc trajectory/waypoint prediction.
-
-5. **Generalization quan trọng hơn accuracy đơn thuần.** Model cần hoạt động được khi môi trường, object, background, vị trí hoặc instruction thay đổi.
-
-6. **Long-horizon behavior là bài toán khó.** Thành công ở một action đơn lẻ không đồng nghĩa với thành công trong một chuỗi nhiều bước.
-
-7. **Safety đặc biệt quan trọng trong autonomous driving.** Collision rate, route completion, comfort và latency là các metric không thể bỏ qua.
-
-8. **Xu hướng mô hình đang chuyển về continuous action generation.** Diffusion và flow matching giúp mô hình hóa action trajectory liên tục, đa mode và mượt hơn action token đơn giản.
-
-9. **AD-VLA đang chuyển từ modular reasoning sang end-to-end reasoning + planning + action.** Các model mới hướng đến xử lý trực tiếp từ multimodal observations tới future trajectory.
-
-10. **Mục tiêu dài hạn là embodied intelligence.** AI không chỉ trả lời câu hỏi mà có thể quan sát, hiểu, suy luận, lập kế hoạch và thực hiện hành động trong môi trường thực tế.
-
----
-
-# 24. Pipeline VLA tổng quát
+Ví dụ về giới hạn ODD:
 
 ```text
-          ┌───────────────────────┐
-          │ Visual Observation    │
-          │ Images / Video        │
-          └──────────┬────────────┘
-                     │
-          ┌──────────▼────────────┐
-          │ Vision Encoder / VLM  │
-          └──────────┬────────────┘
-                     │
-Language Instruction ┼───────────────┐
-                     │               │
-System / Robot State ┼───────────────┤
-                     │               │
-             ┌───────▼───────────────▼─────┐
-             │ Multimodal Representation    │
-             │ + Reasoning / Planning       │
-             └──────────────┬───────────────┘
+Robotaxi
+
+Allowed:
+✓ San Francisco geofence
+✓ mapped urban roads
+✓ supported weather
+✓ defined speed range
+
+Outside ODD:
+✗ unsupported city
+✗ severe weather
+✗ unsupported roadway
+```
+
+Theo NHTSA, Level 4 có thể vận hành mà không cần human driver nhưng chỉ trong **limited service areas / operating conditions**.[^nhtsa-levels]
+
+```text
+                    Level 4
+
+                ┌────────────┐
+                │    ODD     │
+                │            │
+                │    🚗      │
+                │            │
+                └────────────┘
+
+Inside ODD:
+ADS performs complete driving task.
+
+Outside ODD:
+Feature is not designed to operate.
+```
+
+---
+
+## Level 5 — Full Driving Automation
+
+**Level 5** là mức cao nhất trong SAE J3016.
+
+Hệ thống thực hiện toàn bộ driving task:
+
+- không cần người lái;
+- không cần takeover;
+- không bị giới hạn vào một service area hoặc một nhóm điều kiện lái cụ thể như Level 4;
+- về định nghĩa, có thể vận hành trong mọi điều kiện roadway/environment mà một human driver có thể xử lý.[^sae-summary][^nhtsa-levels]
+
+```text
+             Level 5
+
+        Destination
+             ↓
+          Vehicle
+             ↓
+       Full automation
+             ↓
+        Any supported
+   human-drivable roadway/
+      environmental case
+```
+
+Steering wheel và pedals về nguyên tắc có thể không cần thiết đối với một vehicle được thiết kế hoàn toàn cho Level 5 operation.[^sae-chart]
+
+---
+
+# 4. Summary Table
+
+| SAE Level | SAE name | Steering / Acceleration / Braking | Ai giám sát môi trường? | Human takeover | Operating scope |
+|---|---|---|---|---|---|
+| **0** | No Driving Automation | Human | Human | Human luôn lái | Không phải sustained driving automation |
+| **1** | Driver Assistance | System hỗ trợ **lateral OR longitudinal** | Human | Human luôn chịu trách nhiệm | Feature-specific |
+| **2** | Partial Driving Automation | System hỗ trợ **lateral AND longitudinal** | **Human** | Human phải can thiệp khi cần | Feature-specific |
+| **3** | Conditional Driving Automation | **ADS thực hiện complete DDT** | **ADS** | **Human phải takeover khi được yêu cầu** | Limited ODD |
+| **4** | High Driving Automation | **ADS** | **ADS** | **Không yêu cầu human fallback trong ODD** | Limited ODD |
+| **5** | Full Driving Automation | **ADS** | **ADS** | Không cần | All conditions a human driver could manage |
+
+Nguồn taxonomy và trách nhiệm giữa human/system: SAE J3016 và biểu đồ chính thức SAE Levels of Driving Automation.[^sae-j3016][^sae-chart]
+
+---
+
+# 5. Driver Support vs Automated Driving
+
+Một cách đơn giản hơn để nhớ:
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    DRIVER SUPPORT                       │
+│                                                         │
+│        Level 0       Level 1       Level 2              │
+│                                                         │
+│              HUMAN IS DRIVING                           │
+│        HUMAN MONITORS THE ENVIRONMENT                   │
+└───────────────────────────┬─────────────────────────────┘
                             │
-                  ┌─────────▼─────────┐
-                  │ Action Head /     │
-                  │ Action Expert     │
-                  └─────────┬─────────┘
+                   Critical boundary
+                         L2 → L3
                             │
-               ┌────────────▼────────────┐
-               │ Physical Action         │
-               │ Robot / Vehicle Motion  │
-               └─────────────────────────┘
+┌───────────────────────────▼─────────────────────────────┐
+│                 AUTOMATED DRIVING                       │
+│                                                         │
+│        Level 3       Level 4       Level 5              │
+│                                                         │
+│             SYSTEM PERFORMS THE DDT                     │
+└─────────────────────────────────────────────────────────┘
 ```
+
+NHTSA hiện cũng sử dụng sự phân biệt:
+
+- **Level 2 ADAS**: hỗ trợ một người lái vẫn phải liên tục chú ý;
+- **ADS**: thuật ngữ dùng cho **SAE Levels 3–5**.[^nhtsa-sgo][^nhtsa-ads]
 
 ---
 
-# 25. Kết luận
+# 6. Một chiếc xe không nhất thiết có “một Level cố định”
 
-Tài liệu mô tả một quá trình tiến hóa rõ ràng của AI:
+Một điểm thường bị hiểu sai là gán cho cả chiếc xe một mức duy nhất.
+
+SAE J3016 xác định level theo **driving automation feature đang được kích hoạt trong thời điểm cụ thể**. Một chiếc xe có thể chứa nhiều feature có mức automation khác nhau.[^sae-j3016]
+
+Ví dụ khái niệm:
 
 ```text
+Same vehicle
+│
+├── Manual driving                → Level 0
+│
+├── Adaptive Cruise Control       → Level 1 feature
+│
+├── Highway assist               → Level 2 feature
+│
+└── Conditional highway pilot    → Level 3 feature
+```
+
+Do đó câu:
+
+> “This car is Level 3”
+
+thường kém chính xác hơn:
+
+> “This vehicle provides a Level 3 automated-driving feature under a defined ODD.”
+
+---
+
+# 7. SAE Level không phải là thước đo độ thông minh của AI
+
+SAE Levels trả lời chủ yếu câu hỏi:
+
+> **Ai chịu trách nhiệm thực hiện Dynamic Driving Task khi feature được kích hoạt?**
+
+Nó **không trực tiếp đo**:
+
+- model có bao nhiêu parameters;
+- perception accuracy;
+- reasoning capability;
+- VLM/VLA benchmark score;
+- mức độ “thông minh” của AI.
+
+SAE cũng lưu ý taxonomy này mang tính **technical/descriptive**, không phải một thứ tự bắt buộc về cách sản phẩm phải phát triển hoặc một chứng nhận pháp lý tự động.[^sae-summary]
+
+Điều này cực kỳ quan trọng khi nghiên cứu VLA:
+
+```text
+Better VLA benchmark
+        ≠
+Higher SAE automation level
+```
+
+Một VLA có thể là một module mạnh trong hệ thống Level 2, Level 3 hoặc Level 4; chỉ riêng việc sử dụng VLA **không đủ để tuyên bố chiếc xe đạt một SAE Level cao hơn**.
+
+---
+
+# 8. VLA nằm ở đâu trong Autonomous Driving?
+
+Sau khi hiểu SAE Levels, ta mới có thể đặt VLA đúng vị trí.
+
+Pipeline autonomous driving truyền thống thường được mô tả:
+
+```text
+Sensors
+   ↓
 Perception
-    ↓
-Vision-Language Understanding
-    ↓
-Reasoning & Planning
-    ↓
-Vision-Language-Action
-    ↓
-Embodied / Agentic Intelligence
+   ↓
+Prediction
+   ↓
+Planning
+   ↓
+Control
+   ↓
+Vehicle
 ```
 
-VLA là cầu nối giữa **AI hiểu thế giới** và **AI có khả năng tác động lên thế giới**. Hai lĩnh vực robot manipulation và autonomous driving đang hội tụ quanh cùng một ý tưởng: sử dụng foundation multimodal model để kết hợp perception, language understanding, system state, reasoning và action generation trong một framework thống nhất.
+VLA đang nghiên cứu khả năng học một policy thống nhất hơn:
+
+```text
+Multi-camera / Sensors
+        +
+Vehicle state
+        +
+Navigation / Language
+        ↓
+┌──────────────────────┐
+│        VLA           │
+│                      │
+│  Perception          │
+│       ↓              │
+│  Reasoning           │
+│       ↓              │
+│  Planning            │
+└──────────┬───────────┘
+           ↓
+Future trajectory
+ / waypoints / actions
+           ↓
+Controller / Safety Layer
+           ↓
+Vehicle
+```
+
+Vì vậy, trong phần tiếp theo của overview, câu hỏi trung tâm sẽ là:
+
+> **How can vision and language be grounded into safe physical driving actions?**
 
 ---
 
-## Tài liệu nguồn
+# 9. Takeaways
 
-- *From Perception to Action: The Evolution of Vision-Language-Action Models* - Tien-Dat Nguyen, Vision and Learning Laboratory (VAL Lab), VinSpace.
+1. **SAE J3016 có 6 mức: Level 0 → Level 5.**
+2. **Levels 0–2:** human vẫn là người lái và phải giám sát.
+3. **Levels 3–5:** ADS thực hiện complete Dynamic Driving Task khi feature được kích hoạt.
+4. **Level 2 → Level 3** là ranh giới rất quan trọng: responsibility for environment monitoring chuyển từ human sang ADS.
+5. **Level 3:** human phải sẵn sàng takeover.
+6. **Level 4:** không cần human takeover trong ODD, nhưng hệ thống vẫn bị giới hạn bởi ODD.
+7. **Level 5:** full automation trong mọi điều kiện mà human driver có thể xử lý.
+8. SAE Level mô tả **vai trò và trách nhiệm trong driving task**, không phải độ mạnh của AI.
+9. Một VLA model tốt **không tự động đồng nghĩa** với một Level 4/5 autonomous vehicle.
+
+---
+
+# References
+
+[^sae-j3016]: **SAE International.** *J3016_202104: Taxonomy and Definitions for Terms Related to Driving Automation Systems for On-Road Motor Vehicles.* Revised April 30, 2021. DOI: https://doi.org/10.4271/J3016_202104  
+    Official SAE page: https://saemobilus.sae.org/standards/j3016_202104-taxonomy-definitions-terms-related-driving-automation-systems-road-motor-vehicles
+
+[^sae-chart]: **SAE International.** *SAE J3016 Levels of Driving Automation — Visual Chart.* 2021. https://www.sae.org/binaries/content/assets/cm/content/blog/sae-j3016-visual-chart_5.3.21.pdf
+
+[^sae-summary]: **SAE International.** *Automated Driving: Summary of SAE International's Levels of Driving Automation for On-Road Vehicles.* https://www.sae.org/binaries/content/assets/cm/content/news/press-releases/pathway-to-autonomy/automated_driving.pdf
+
+[^nhtsa-levels]: **National Highway Traffic Safety Administration (NHTSA).** *Automated Vehicle Safety — The Road to Full Automation.* https://www.nhtsa.gov/vehicle-safety/automated-vehicle-safety
+
+[^nhtsa-sgo]: **NHTSA.** *Standing General Order on Crash Reporting — Understanding the Differences: ADS vs Level 2 ADAS.* https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting
+
+[^nhtsa-ads]: **NHTSA.** *Automated Driving Systems — Scope and Applicability.* https://www.nhtsa.gov/vehicle-manufacturers/automated-driving-systems
+
+[^odd]: **Automated Vehicle Safety Consortium / SAE.** *Best Practice for Evaluation of Behavioral Competencies for Automated Driving System Dedicated Vehicles (ADS-DVs).* Includes SAE J3016 definitions of DDT, OEDR and ODD. https://go.sae.org/rs/525-RCG-129/images/AVSC00008202111.pdf
+
+---
+
+## Next
+
+**Part 2 — From Traditional Autonomous Driving to Vision-Language-Action (VLA)**
+
+Planned topics:
+
+- Modular autonomous-driving pipeline
+- End-to-End Autonomous Driving
+- Vision-Language Models for driving
+- VLA for driving
+- Action representation: direct control vs waypoints vs trajectory tokens
+- VLA4AD model evolution
