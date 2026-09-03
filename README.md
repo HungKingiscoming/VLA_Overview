@@ -1,17 +1,17 @@
 # Vision-Language-Action Models for Autonomous Driving
 
-> **Personal overview / study notes** về cách Vision-Language-Action (VLA) được nghiên cứu và ứng dụng trong autonomous driving.  
-> Phần đầu tiên của tài liệu thiết lập nền tảng về **các mức độ tự động hóa lái xe theo SAE J3016** trước khi đi vào VLA.
+> **Personal overview / study notes** on how Vision-Language-Action (VLA) models are researched and applied in autonomous driving.  
+> This first part establishes the foundation of **driving automation levels according to SAE J3016** before moving into VLA.
 
 ---
 
 # 1. Levels of Driving Automation
 
-## 1.1. Vì sao cần phân biệt các mức độ tự lái?
+## 1.1. Why do we need to distinguish different levels of driving automation?
 
-Cụm từ **“self-driving car”**, **“autonomous vehicle”** hay **“xe tự lái”** thường được sử dụng khá rộng trong truyền thông. Tuy nhiên, trong nghiên cứu và công nghiệp, mức độ tự động hóa thường được mô tả theo chuẩn **SAE J3016 – Taxonomy and Definitions for Terms Related to Driving Automation Systems for On-Road Motor Vehicles**.[^sae-j3016]
+The terms **“self-driving car”**, **“autonomous vehicle”**, and **“driverless car”** are often used broadly in media and everyday discussion. However, in research and industry, driving automation is commonly described using **SAE J3016 – Taxonomy and Definitions for Terms Related to Driving Automation Systems for On-Road Motor Vehicles**.[^sae-j3016]
 
-SAE chia driving automation thành **6 mức, từ Level 0 đến Level 5**:
+SAE defines **six levels of driving automation, from Level 0 to Level 5**:
 
 ```text
 Level 0 ── Level 1 ── Level 2 ── Level 3 ── Level 4 ── Level 5
@@ -20,29 +20,31 @@ Level 0 ── Level 1 ── Level 2 ── Level 3 ── Level 4 ── Level
                          └──── Automated Driving ──────────┘
 ```
 
-Theo biểu đồ chính thức của SAE, **Levels 0–2** thuộc nhóm mà con người vẫn là người lái và phải giám sát hệ thống; **Levels 3–5** là các mức mà Automated Driving System (ADS) thực hiện toàn bộ **Dynamic Driving Task (DDT)** khi tính năng tự động hóa được kích hoạt.[^sae-chart]
+According to the official SAE chart, **Levels 0–2** belong to the group in which the human remains the driver and must supervise the system. **Levels 3–5** are the levels in which the Automated Driving System (ADS) performs the complete **Dynamic Driving Task (DDT)** while the automated-driving feature is engaged.[^sae-chart]
 
-> **Điểm chuyển quan trọng nhất không phải Level 4 → Level 5, mà là Level 2 → Level 3.**  
-> Ở Level 2, người lái vẫn chịu trách nhiệm giám sát môi trường. Ở Level 3, hệ thống tự động thực hiện toàn bộ DDT trong phạm vi hoạt động được thiết kế, nhưng người lái phải sẵn sàng tiếp quản khi hệ thống yêu cầu.[^sae-summary][^nhtsa-levels]
+> **The most important transition is not Level 4 → Level 5, but Level 2 → Level 3.**  
+> At Level 2, the human driver is still responsible for monitoring the driving environment. At Level 3, the automated driving system performs the complete DDT within its designed operating conditions, although the human must be prepared to take over when requested.[^sae-summary][^nhtsa-levels]
 
 ---
 
-## 1.2. Ba khái niệm cần biết trước
+## 1.2. Three concepts to understand first
 
 ### Dynamic Driving Task — DDT
 
-**Dynamic Driving Task (DDT)** là các nhiệm vụ vận hành và chiến thuật cần thực hiện theo thời gian thực để điều khiển xe trên đường. Theo SAE, nó bao gồm các chức năng như:
+The **Dynamic Driving Task (DDT)** refers to the operational and tactical functions that must be performed in real time to operate a vehicle on the road.
 
-- điều khiển chuyển động ngang — **lateral control / steering**;
-- điều khiển chuyển động dọc — **acceleration và deceleration**;
-- quan sát môi trường;
-- phát hiện và phản ứng với object/event;
-- lập kế hoạch maneuver;
-- signaling và các hành vi vận hành liên quan.
+According to SAE, the DDT includes functions such as:
 
-DDT **không bao gồm** các nhiệm vụ chiến lược cấp cao như lựa chọn điểm đến hoặc lập lịch chuyến đi.[^sae-summary]
+- lateral vehicle motion control — **steering**;
+- longitudinal vehicle motion control — **acceleration and deceleration**;
+- monitoring the driving environment;
+- detecting and responding to objects and events;
+- planning tactical maneuvers;
+- signaling and other operational driving behaviors.
 
-Có thể hình dung:
+The DDT **does not include** strategic functions such as choosing a destination or scheduling a trip.[^sae-summary]
+
+A simplified view is:
 
 ```text
 Dynamic Driving Task
@@ -68,7 +70,9 @@ Dynamic Driving Task
 
 ### Object and Event Detection and Response — OEDR
 
-**OEDR** là phần của DDT chịu trách nhiệm:
+**Object and Event Detection and Response (OEDR)** is the part of the DDT responsible for identifying relevant objects and events in the environment and responding appropriately.
+
+Conceptually:
 
 ```text
 Detect
@@ -82,7 +86,7 @@ Prepare a response
 Execute an appropriate response
 ```
 
-Ví dụ:
+For example:
 
 ```text
 Camera detects a pedestrian
@@ -96,30 +100,32 @@ Vehicle prepares to yield
 Decelerate / stop
 ```
 
-Khái niệm này đặc biệt quan trọng với VLA vì nhiều VLA driving models đang cố gắng kết hợp:
+This concept is particularly important for VLA because many VLA driving models attempt to integrate:
 
 ```text
 Perception → Reasoning → Planning → Action
 ```
 
-trong một mô hình đa phương thức thống nhất.
+within a unified multimodal model.
 
 ---
 
 ### Operational Design Domain — ODD
 
-**Operational Design Domain (ODD)** mô tả **những điều kiện mà một hệ thống driving automation được thiết kế để hoạt động**. Các giới hạn có thể liên quan tới:
+The **Operational Design Domain (ODD)** describes **the operating conditions under which a driving automation system or feature is specifically designed to function**.
 
-- khu vực địa lý;
-- loại đường;
-- tốc độ;
-- thời gian trong ngày;
-- thời tiết;
-- điều kiện ánh sáng;
-- tình trạng giao thông;
-- đặc điểm cơ sở hạ tầng.[^odd]
+These conditions may include:
 
-Ví dụ một hệ thống có thể có ODD:
+- geographic area;
+- road type;
+- vehicle speed;
+- time of day;
+- weather;
+- lighting conditions;
+- traffic conditions;
+- infrastructure characteristics.[^odd]
+
+For example, an automated-driving feature may have an ODD such as:
 
 ```text
 Highway only
@@ -129,7 +135,7 @@ Highway only
 + speed ≤ 100 km/h
 ```
 
-Một robotaxi khác có thể có:
+A robotaxi service may instead operate under:
 
 ```text
 Geofenced urban area
@@ -138,8 +144,8 @@ Geofenced urban area
 + no severe weather
 ```
 
-**Level 4 vẫn có thể bị giới hạn bởi ODD.**  
-**Level 5** được định nghĩa là full driving automation có thể thực hiện nhiệm vụ lái trong mọi điều kiện đường và môi trường mà một người lái có thể xử lý; vì vậy Level 5 không còn bị giới hạn bởi một ODD cụ thể theo cách Level 3/4 thường bị giới hạn.[^nhtsa-levels][^odd]
+**Level 4 can still be limited by an ODD.**  
+**Level 5**, by definition, refers to full driving automation that can perform the driving task under all roadway and environmental conditions that a human driver could manage, rather than being restricted to a specific ODD in the same way as typical Level 3 or Level 4 systems.[^nhtsa-levels][^odd]
 
 ---
 
@@ -147,15 +153,15 @@ Geofenced urban area
 
 ## Level 0 — No Driving Automation
 
-Ở **Level 0**, con người thực hiện toàn bộ nhiệm vụ lái xe.
+At **Level 0**, the human performs the entire driving task.
 
-Hệ thống có thể cung cấp:
+The vehicle may still provide:
 
-- cảnh báo;
-- hỗ trợ trong thời gian ngắn;
+- warnings;
+- momentary assistance;
 - emergency intervention.
 
-Ví dụ mà NHTSA dùng để giải thích Level 0 gồm:
+Examples used by NHTSA to explain Level 0 include:
 
 - Forward Collision Warning;
 - Lane Departure Warning;
@@ -172,15 +178,15 @@ Vehicle
  └── Warning / momentary assistance
 ```
 
-### Lưu ý
+### Important note
 
-Trong SAE J3016, các hệ thống active safety chỉ can thiệp **tạm thời**, chẳng hạn Automatic Emergency Braking, không được xem là driving automation theo nghĩa thực hiện DDT một cách **sustained**.[^sae-j3016]
+Under SAE J3016, active-safety systems that intervene only **momentarily**, such as Automatic Emergency Braking, are not considered driving automation in the sense of continuously performing part of the DDT.[^sae-j3016]
 
 ---
 
 ## Level 1 — Driver Assistance
 
-Ở **Level 1**, hệ thống có thể hỗ trợ liên tục:
+At **Level 1**, the system can continuously assist with either:
 
 ```text
 Steering
@@ -188,12 +194,12 @@ Steering
 Acceleration / Braking
 ```
 
-nhưng **không đồng thời đảm nhiệm cả hai** như một Level 2 feature.[^sae-chart]
+but it does **not simultaneously perform both** as a Level 2 feature would.[^sae-chart]
 
-Ví dụ:
+Typical examples include:
 
 - Adaptive Cruise Control;
-- Lane Centering / Lane Keeping assistance.
+- Lane Centering / Lane Keeping Assistance.
 
 ```text
                  Human driver
@@ -208,13 +214,13 @@ Ví dụ:
               OR vice versa
 ```
 
-Người lái vẫn chịu trách nhiệm cho nhiệm vụ lái và phải liên tục giám sát hệ thống.[^nhtsa-levels]
+The human driver remains responsible for the driving task and must continuously supervise the system.[^nhtsa-levels]
 
 ---
 
 ## Level 2 — Partial Driving Automation
 
-Ở **Level 2**, hệ thống có thể thực hiện **đồng thời**:
+At **Level 2**, the system can simultaneously perform:
 
 ```text
 Steering
@@ -222,7 +228,7 @@ Steering
 Acceleration / Braking
 ```
 
-Ví dụ điển hình là sự kết hợp:
+A typical example is the combination of:
 
 ```text
 Lane Centering
@@ -230,16 +236,16 @@ Lane Centering
 Adaptive Cruise Control
 ```
 
-Tuy nhiên:
+However:
 
-> **Level 2 không có nghĩa là xe có thể tự lái mà không cần người giám sát.**
+> **Level 2 does not mean that the vehicle can drive itself without human supervision.**
 
-Người lái vẫn phải:
+The human driver must still:
 
-- quan sát đường;
-- giám sát hệ thống;
-- phát hiện tình huống nguy hiểm;
-- sẵn sàng steering/braking khi cần.[^nhtsa-sgo]
+- watch the road;
+- supervise the system;
+- detect hazardous situations;
+- intervene with steering or braking when necessary.[^nhtsa-sgo]
 
 ```text
               Level 2
@@ -265,13 +271,13 @@ continuously monitors environment
 remains responsible
 ```
 
-NHTSA phân biệt rõ **Level 2 ADAS** với **ADS Levels 3–5**: Level 2 chỉ cung cấp partial driving automation cho một người lái đang chú ý, trong khi ADS hướng tới thực hiện toàn bộ DDT trong phạm vi hoạt động của hệ thống.[^nhtsa-sgo]
+NHTSA clearly distinguishes **Level 2 ADAS** from **ADS Levels 3–5**. Level 2 provides partial driving automation to an attentive human driver, whereas an ADS is intended to perform the complete DDT within its operating conditions.[^nhtsa-sgo]
 
 ---
 
 # 3. The Critical Transition: Level 2 → Level 3
 
-Đây là ranh giới quan trọng nhất để hiểu autonomous driving.
+This is one of the most important boundaries in autonomous-driving research.
 
 ```text
 LEVEL 2                             LEVEL 3
@@ -287,18 +293,18 @@ environment                          environment
 Human is driving                    System is driving
 ```
 
-SAE nhấn mạnh rằng khác biệt cốt lõi giữa Level 2 và Level 3 là **ai thực hiện toàn bộ Dynamic Driving Task**.[^sae-summary]
+SAE emphasizes that the key distinction between Level 2 and Level 3 is **who performs the complete Dynamic Driving Task**.[^sae-summary]
 
 ---
 
 ## Level 3 — Conditional Driving Automation
 
-Ở **Level 3**, khi ADS hoạt động trong ODD của nó:
+At **Level 3**, while the ADS is operating inside its ODD:
 
-- hệ thống thực hiện toàn bộ DDT;
-- hệ thống giám sát môi trường;
-- con người không cần liên tục thực hiện DDT;
-- **nhưng phải sẵn sàng tiếp quản khi hệ thống yêu cầu**.[^nhtsa-levels]
+- the system performs the complete DDT;
+- the system monitors the driving environment;
+- the human does not need to continuously perform the DDT;
+- **but the human must be ready to take over when the system issues a request to intervene**.[^nhtsa-levels]
 
 ```text
 Normal operation
@@ -327,21 +333,21 @@ Human driver
 Take over
 ```
 
-Do đó Level 3 tạo ra một vấn đề nghiên cứu đặc biệt quan trọng:
+Therefore, Level 3 introduces a particularly important research problem:
 
-> **Takeover / handover:** người lái có thể phản ứng đủ nhanh và chính xác khi hệ thống yêu cầu tiếp quản hay không?
+> **Takeover / handover:** can the human driver respond quickly and correctly enough when the ADS requests intervention?
 
 ---
 
 ## Level 4 — High Driving Automation
 
-Ở **Level 4**, hệ thống có thể thực hiện toàn bộ DDT **và không phụ thuộc vào người lái để xử lý fallback** trong ODD mà nó hỗ trợ.[^sae-chart]
+At **Level 4**, the system can perform the complete DDT **and does not depend on the human driver to perform the fallback task** within the ODD it supports.[^sae-chart]
 
-Người ngồi trong xe có thể chỉ là passenger.
+A person inside the vehicle may therefore function only as a passenger.
 
-Tuy nhiên Level 4 **không có nghĩa là xe chạy được ở mọi nơi**.
+However, Level 4 **does not mean that the vehicle can operate everywhere**.
 
-Ví dụ về giới hạn ODD:
+For example, the ODD may restrict operation to:
 
 ```text
 Robotaxi
@@ -358,7 +364,7 @@ Outside ODD:
 ✗ unsupported roadway
 ```
 
-Theo NHTSA, Level 4 có thể vận hành mà không cần human driver nhưng chỉ trong **limited service areas / operating conditions**.[^nhtsa-levels]
+According to NHTSA, Level 4 can operate without a human driver, but only within **limited service areas or operating conditions**.[^nhtsa-levels]
 
 ```text
                     Level 4
@@ -371,24 +377,24 @@ Theo NHTSA, Level 4 có thể vận hành mà không cần human driver nhưng c
                 └────────────┘
 
 Inside ODD:
-ADS performs complete driving task.
+ADS performs the complete driving task.
 
 Outside ODD:
-Feature is not designed to operate.
+The feature is not designed to operate.
 ```
 
 ---
 
 ## Level 5 — Full Driving Automation
 
-**Level 5** là mức cao nhất trong SAE J3016.
+**Level 5** is the highest level in SAE J3016.
 
-Hệ thống thực hiện toàn bộ driving task:
+The system performs the entire driving task:
 
-- không cần người lái;
-- không cần takeover;
-- không bị giới hạn vào một service area hoặc một nhóm điều kiện lái cụ thể như Level 4;
-- về định nghĩa, có thể vận hành trong mọi điều kiện roadway/environment mà một human driver có thể xử lý.[^sae-summary][^nhtsa-levels]
+- no human driver is required;
+- no takeover is required;
+- operation is not restricted to a limited service area or a narrow set of driving conditions in the way Level 4 typically is;
+- by definition, the system can operate under all roadway and environmental conditions that a human driver could manage.[^sae-summary][^nhtsa-levels]
 
 ```text
              Level 5
@@ -404,28 +410,28 @@ Hệ thống thực hiện toàn bộ driving task:
       environmental case
 ```
 
-Steering wheel và pedals về nguyên tắc có thể không cần thiết đối với một vehicle được thiết kế hoàn toàn cho Level 5 operation.[^sae-chart]
+A vehicle designed entirely for Level 5 operation could, in principle, be designed without conventional driver controls such as a steering wheel or pedals.[^sae-chart]
 
 ---
 
 # 4. Summary Table
 
-| SAE Level | SAE name | Steering / Acceleration / Braking | Ai giám sát môi trường? | Human takeover | Operating scope |
+| SAE Level | SAE Name | Steering / Acceleration / Braking | Who monitors the environment? | Human takeover | Operating scope |
 |---|---|---|---|---|---|
-| **0** | No Driving Automation | Human | Human | Human luôn lái | Không phải sustained driving automation |
-| **1** | Driver Assistance | System hỗ trợ **lateral OR longitudinal** | Human | Human luôn chịu trách nhiệm | Feature-specific |
-| **2** | Partial Driving Automation | System hỗ trợ **lateral AND longitudinal** | **Human** | Human phải can thiệp khi cần | Feature-specific |
-| **3** | Conditional Driving Automation | **ADS thực hiện complete DDT** | **ADS** | **Human phải takeover khi được yêu cầu** | Limited ODD |
-| **4** | High Driving Automation | **ADS** | **ADS** | **Không yêu cầu human fallback trong ODD** | Limited ODD |
-| **5** | Full Driving Automation | **ADS** | **ADS** | Không cần | All conditions a human driver could manage |
+| **0** | No Driving Automation | Human | Human | Human is always driving | No sustained driving automation |
+| **1** | Driver Assistance | System assists **lateral OR longitudinal** control | Human | Human remains responsible | Feature-specific |
+| **2** | Partial Driving Automation | System assists **lateral AND longitudinal** control | **Human** | Human must intervene when needed | Feature-specific |
+| **3** | Conditional Driving Automation | **ADS performs complete DDT** | **ADS** | **Human must take over when requested** | Limited ODD |
+| **4** | High Driving Automation | **ADS** | **ADS** | **No human fallback required within ODD** | Limited ODD |
+| **5** | Full Driving Automation | **ADS** | **ADS** | Not required | All conditions a human driver could manage |
 
-Nguồn taxonomy và trách nhiệm giữa human/system: SAE J3016 và biểu đồ chính thức SAE Levels of Driving Automation.[^sae-j3016][^sae-chart]
+Sources for the taxonomy and the division of responsibility between the human driver and the automated system: SAE J3016 and the official SAE Levels of Driving Automation chart.[^sae-j3016][^sae-chart]
 
 ---
 
 # 5. Driver Support vs Automated Driving
 
-Một cách đơn giản hơn để nhớ:
+A simpler way to remember the SAE levels is:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -449,20 +455,20 @@ Một cách đơn giản hơn để nhớ:
 └─────────────────────────────────────────────────────────┘
 ```
 
-NHTSA hiện cũng sử dụng sự phân biệt:
+NHTSA also uses a similar distinction:
 
-- **Level 2 ADAS**: hỗ trợ một người lái vẫn phải liên tục chú ý;
-- **ADS**: thuật ngữ dùng cho **SAE Levels 3–5**.[^nhtsa-sgo][^nhtsa-ads]
+- **Level 2 ADAS**: assistance for a human driver who must remain continuously attentive;
+- **ADS**: terminology used for **SAE Levels 3–5**.[^nhtsa-sgo][^nhtsa-ads]
 
 ---
 
-# 6. Một chiếc xe không nhất thiết có “một Level cố định”
+# 6. A Vehicle Does Not Necessarily Have One Fixed “Automation Level”
 
-Một điểm thường bị hiểu sai là gán cho cả chiếc xe một mức duy nhất.
+A common misunderstanding is to assign a single SAE level to an entire vehicle.
 
-SAE J3016 xác định level theo **driving automation feature đang được kích hoạt trong thời điểm cụ thể**. Một chiếc xe có thể chứa nhiều feature có mức automation khác nhau.[^sae-j3016]
+SAE J3016 defines the level according to the **driving automation feature that is engaged at a particular time**. A vehicle may contain multiple features with different automation levels.[^sae-j3016]
 
-Ví dụ khái niệm:
+For example:
 
 ```text
 Same vehicle
@@ -476,33 +482,33 @@ Same vehicle
 └── Conditional highway pilot    → Level 3 feature
 ```
 
-Do đó câu:
+Therefore, the statement:
 
-> “This car is Level 3”
+> “This car is Level 3.”
 
-thường kém chính xác hơn:
+is often less precise than:
 
 > “This vehicle provides a Level 3 automated-driving feature under a defined ODD.”
 
 ---
 
-# 7. SAE Level không phải là thước đo độ thông minh của AI
+# 7. SAE Level Is Not a Measure of AI Intelligence
 
-SAE Levels trả lời chủ yếu câu hỏi:
+SAE Levels primarily answer the question:
 
-> **Ai chịu trách nhiệm thực hiện Dynamic Driving Task khi feature được kích hoạt?**
+> **Who is responsible for performing the Dynamic Driving Task while the automation feature is engaged?**
 
-Nó **không trực tiếp đo**:
+They do **not directly measure**:
 
-- model có bao nhiêu parameters;
+- model parameter count;
 - perception accuracy;
 - reasoning capability;
-- VLM/VLA benchmark score;
-- mức độ “thông minh” của AI.
+- VLM or VLA benchmark performance;
+- the overall “intelligence” of the AI system.
 
-SAE cũng lưu ý taxonomy này mang tính **technical/descriptive**, không phải một thứ tự bắt buộc về cách sản phẩm phải phát triển hoặc một chứng nhận pháp lý tự động.[^sae-summary]
+SAE also notes that the taxonomy is **technical and descriptive**. It is not a required development sequence, nor does it automatically act as a legal certification of a product.[^sae-summary]
 
-Điều này cực kỳ quan trọng khi nghiên cứu VLA:
+This distinction is extremely important when studying VLA:
 
 ```text
 Better VLA benchmark
@@ -510,15 +516,15 @@ Better VLA benchmark
 Higher SAE automation level
 ```
 
-Một VLA có thể là một module mạnh trong hệ thống Level 2, Level 3 hoặc Level 4; chỉ riêng việc sử dụng VLA **không đủ để tuyên bố chiếc xe đạt một SAE Level cao hơn**.
+A VLA model may be an important component inside a Level 2, Level 3, or Level 4 system. Merely using a VLA model is **not sufficient to claim a higher SAE automation level**.
 
 ---
 
-# 8. VLA nằm ở đâu trong Autonomous Driving?
+# 8. Where Does VLA Fit in Autonomous Driving?
 
-Sau khi hiểu SAE Levels, ta mới có thể đặt VLA đúng vị trí.
+After understanding SAE automation levels, we can place VLA more accurately within an autonomous-driving system.
 
-Pipeline autonomous driving truyền thống thường được mô tả:
+A traditional autonomous-driving pipeline is often described as:
 
 ```text
 Sensors
@@ -534,7 +540,7 @@ Control
 Vehicle
 ```
 
-VLA đang nghiên cứu khả năng học một policy thống nhất hơn:
+VLA research investigates whether a more unified policy can learn a mapping such as:
 
 ```text
 Multi-camera / Sensors
@@ -561,23 +567,23 @@ Controller / Safety Layer
 Vehicle
 ```
 
-Vì vậy, trong phần tiếp theo của overview, câu hỏi trung tâm sẽ là:
+The central question for the next part of this overview is therefore:
 
 > **How can vision and language be grounded into safe physical driving actions?**
 
 ---
 
-# 9. Takeaways
+# 9. Key Takeaways
 
-1. **SAE J3016 có 6 mức: Level 0 → Level 5.**
-2. **Levels 0–2:** human vẫn là người lái và phải giám sát.
-3. **Levels 3–5:** ADS thực hiện complete Dynamic Driving Task khi feature được kích hoạt.
-4. **Level 2 → Level 3** là ranh giới rất quan trọng: responsibility for environment monitoring chuyển từ human sang ADS.
-5. **Level 3:** human phải sẵn sàng takeover.
-6. **Level 4:** không cần human takeover trong ODD, nhưng hệ thống vẫn bị giới hạn bởi ODD.
-7. **Level 5:** full automation trong mọi điều kiện mà human driver có thể xử lý.
-8. SAE Level mô tả **vai trò và trách nhiệm trong driving task**, không phải độ mạnh của AI.
-9. Một VLA model tốt **không tự động đồng nghĩa** với một Level 4/5 autonomous vehicle.
+1. **SAE J3016 defines six levels: Level 0 → Level 5.**
+2. **Levels 0–2:** the human remains the driver and must monitor the driving environment.
+3. **Levels 3–5:** the ADS performs the complete Dynamic Driving Task while the feature is engaged.
+4. **Level 2 → Level 3** is a critical boundary because responsibility for performing and monitoring the complete DDT shifts from the human driver to the ADS.
+5. **Level 3:** the human must be ready to take over when requested.
+6. **Level 4:** no human fallback is required within the ODD, but operation can still be ODD-limited.
+7. **Level 5:** full driving automation under all roadway and environmental conditions that a human driver could manage.
+8. SAE Levels describe **driving-task responsibility**, not the strength or intelligence of an AI model.
+9. A strong VLA model **does not automatically imply** a Level 4 or Level 5 autonomous vehicle.
 
 ---
 
@@ -592,11 +598,11 @@ Vì vậy, trong phần tiếp theo của overview, câu hỏi trung tâm sẽ l
 
 [^nhtsa-levels]: **National Highway Traffic Safety Administration (NHTSA).** *Automated Vehicle Safety — The Road to Full Automation.* https://www.nhtsa.gov/vehicle-safety/automated-vehicle-safety
 
-[^nhtsa-sgo]: **NHTSA.** *Standing General Order on Crash Reporting — Understanding the Differences: ADS vs Level 2 ADAS.* https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting
+[^nhtsa-sgo]: **National Highway Traffic Safety Administration (NHTSA).** *Standing General Order on Crash Reporting — Understanding the Differences: ADS vs Level 2 ADAS.* https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting
 
-[^nhtsa-ads]: **NHTSA.** *Automated Driving Systems — Scope and Applicability.* https://www.nhtsa.gov/vehicle-manufacturers/automated-driving-systems
+[^nhtsa-ads]: **National Highway Traffic Safety Administration (NHTSA).** *Automated Driving Systems — Scope and Applicability.* https://www.nhtsa.gov/vehicle-manufacturers/automated-driving-systems
 
-[^odd]: **Automated Vehicle Safety Consortium / SAE.** *Best Practice for Evaluation of Behavioral Competencies for Automated Driving System Dedicated Vehicles (ADS-DVs).* Includes SAE J3016 definitions of DDT, OEDR and ODD. https://go.sae.org/rs/525-RCG-129/images/AVSC00008202111.pdf
+[^odd]: **Automated Vehicle Safety Consortium / SAE.** *Best Practice for Evaluation of Behavioral Competencies for Automated Driving System Dedicated Vehicles (ADS-DVs).* Includes SAE J3016 definitions of DDT, OEDR, and ODD. https://go.sae.org/rs/525-RCG-129/images/AVSC00008202111.pdf
 
 ---
 
@@ -609,6 +615,6 @@ Planned topics:
 - Modular autonomous-driving pipeline
 - End-to-End Autonomous Driving
 - Vision-Language Models for driving
-- VLA for driving
+- Vision-Language-Action models for driving
 - Action representation: direct control vs waypoints vs trajectory tokens
-- VLA4AD model evolution
+- Evolution of VLA models for autonomous driving
